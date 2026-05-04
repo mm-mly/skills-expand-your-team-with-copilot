@@ -617,7 +617,12 @@ document.addEventListener("DOMContentLoaded", () => {
         title: `${name} – Mergington High School`,
         text: shareText,
         url: shareUrl,
-      }).catch(() => {});
+      }).catch((err) => {
+        // AbortError means the user cancelled — ignore it
+        if (err.name !== "AbortError") {
+          console.error("Web Share API error:", err);
+        }
+      });
       return;
     }
 
@@ -649,18 +654,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Copy link handler
     dropdown.querySelector("#share-copy-link").addEventListener("click", () => {
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        showMessage("Link copied to clipboard!", "success");
-      }).catch(() => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          showMessage("Link copied to clipboard!", "success");
+        }).catch(() => {
+          showMessage(`Copy this link: ${shareUrl}`, "info");
+        });
+      } else {
         // Fallback for older browsers
-        const tmp = document.createElement("input");
-        tmp.value = shareUrl;
-        document.body.appendChild(tmp);
-        tmp.select();
-        document.execCommand("copy");
-        document.body.removeChild(tmp);
-        showMessage("Link copied to clipboard!", "success");
-      });
+        try {
+          const tmp = document.createElement("input");
+          tmp.value = shareUrl;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand("copy");
+          document.body.removeChild(tmp);
+          showMessage("Link copied to clipboard!", "success");
+        } catch {
+          showMessage(`Copy this link: ${shareUrl}`, "info");
+        }
+      }
       dropdown.remove();
     });
 
@@ -668,7 +681,9 @@ document.addEventListener("DOMContentLoaded", () => {
     dropdown.querySelector("#share-email").addEventListener("click", () => {
       const subject = encodeURIComponent(`Check out "${name}" at Mergington High School!`);
       const body = encodeURIComponent(`${shareText}\n\n${shareUrl}`);
-      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      const anchor = document.createElement("a");
+      anchor.href = `mailto:?subject=${subject}&body=${body}`;
+      anchor.click();
       dropdown.remove();
     });
 
