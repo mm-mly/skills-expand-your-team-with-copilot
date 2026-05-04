@@ -568,6 +568,9 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `
         }
+        <button class="share-button" data-activity="${name}" aria-label="Share this activity" title="Share this activity">
+          🔗 Share
+        </button>
       </div>
     `;
 
@@ -587,7 +590,110 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Add click handler for share button
+    const shareButton = activityCard.querySelector(".share-button");
+    shareButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      shareActivity(name, details, shareButton);
+    });
+
     activitiesList.appendChild(activityCard);
+  }
+
+  // Build a shareable URL for an activity
+  function buildShareUrl(activityName) {
+    const base = window.location.origin + window.location.pathname;
+    return `${base}?activity=${encodeURIComponent(activityName)}`;
+  }
+
+  // Share an activity using the Web Share API or a fallback dropdown
+  function shareActivity(name, details, triggerButton) {
+    const shareUrl = buildShareUrl(name);
+    const shareText = `Check out "${name}" at Mergington High School!\n${details.description}\nSchedule: ${formatSchedule(details)}`;
+
+    // Use native Web Share API when available (mobile/modern browsers)
+    if (navigator.share) {
+      navigator.share({
+        title: `${name} – Mergington High School`,
+        text: shareText,
+        url: shareUrl,
+      }).catch((err) => {
+        // AbortError means the user cancelled — ignore it
+        if (err.name !== "AbortError") {
+          console.error("Web Share API error:", err);
+        }
+      });
+      return;
+    }
+
+    // Fallback: show a small share dropdown near the button
+    showShareDropdown(name, shareUrl, shareText, triggerButton);
+  }
+
+  // Show a small share options dropdown
+  function showShareDropdown(name, shareUrl, shareText, triggerButton) {
+    // Remove any existing share dropdown first
+    const existing = document.getElementById("share-dropdown");
+    if (existing) {
+      existing.remove();
+    }
+
+    const dropdown = document.createElement("div");
+    dropdown.id = "share-dropdown";
+    dropdown.className = "share-dropdown";
+    dropdown.innerHTML = `
+      <button class="share-option" id="share-copy-link">📋 Copy link</button>
+      <button class="share-option" id="share-email">📧 Email</button>
+    `;
+    document.body.appendChild(dropdown);
+
+    // Position dropdown near the trigger button
+    const rect = triggerButton.getBoundingClientRect();
+    dropdown.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    dropdown.style.left = `${rect.left + window.scrollX}px`;
+
+    // Copy link handler
+    dropdown.querySelector("#share-copy-link").addEventListener("click", () => {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          showMessage("Link copied to clipboard!", "success");
+        }).catch(() => {
+          showMessage(`Copy this link: ${shareUrl}`, "info");
+        });
+      } else {
+        // Fallback for older browsers
+        try {
+          const tmp = document.createElement("input");
+          tmp.value = shareUrl;
+          document.body.appendChild(tmp);
+          tmp.select();
+          document.execCommand("copy");
+          document.body.removeChild(tmp);
+          showMessage("Link copied to clipboard!", "success");
+        } catch {
+          showMessage(`Copy this link: ${shareUrl}`, "info");
+        }
+      }
+      dropdown.remove();
+    });
+
+    // Email handler
+    dropdown.querySelector("#share-email").addEventListener("click", () => {
+      const subject = encodeURIComponent(`Check out "${name}" at Mergington High School!`);
+      const body = encodeURIComponent(`${shareText}\n\n${shareUrl}`);
+      const anchor = document.createElement("a");
+      anchor.href = `mailto:?subject=${subject}&body=${body}`;
+      anchor.click();
+      dropdown.remove();
+    });
+
+    // Close dropdown when clicking elsewhere
+    setTimeout(() => {
+      document.addEventListener("click", function closeDropdown() {
+        dropdown.remove();
+        document.removeEventListener("click", closeDropdown);
+      });
+    }, 0);
   }
 
   // Event listeners for search and filter
@@ -864,5 +970,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize app
   checkAuthentication();
   initializeFilters();
+
+  // If URL contains ?activity=..., pre-fill the search box so the shared activity is highlighted
+  const urlParams = new URLSearchParams(window.location.search);
+  const sharedActivity = urlParams.get("activity");
+  if (sharedActivity) {
+    searchQuery = sharedActivity;
+    searchInput.value = sharedActivity;
+  }
+
   fetchActivities();
 });
